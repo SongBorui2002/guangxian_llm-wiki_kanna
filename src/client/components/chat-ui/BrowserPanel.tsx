@@ -2,6 +2,14 @@ import { CornerDownLeft, Ellipsis, ExternalLink, Globe, Home, Minus, Play, Plus,
 import { memo, useCallback, useEffect, useRef, useState, type FocusEvent, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react"
 import type { LocalHttpServerInfo, ProjectQuickAction } from "../../../shared/protocol"
 import type { KannaSocket } from "../../app/socket"
+import {
+  getCachedLocalHttpServers,
+  getCachedProjectQuickActions,
+  refreshCachedLocalHttpServers,
+  refreshCachedProjectQuickActions,
+  removeCachedLocalHttpServer,
+  writeCachedProjectQuickActions,
+} from "../../lib/browserPanelCache"
 import { useRightSidebarStore } from "../../stores/rightSidebarStore"
 import { Button } from "../ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
@@ -72,16 +80,15 @@ function BrowserPanelImpl({ projectId, socket, onRunQuickAction }: BrowserPanelP
   const zoom = browserState?.zoom ?? 1
   const [addressDraft, setAddressDraft] = useState(address)
   const [iframeVersion, setIframeVersion] = useState(0)
-  const [localServers, setLocalServers] = useState<LocalHttpServerInfo[]>([])
+  const [localServers, setLocalServers] = useState<LocalHttpServerInfo[]>(() => getCachedLocalHttpServers() ?? [])
   const [isLoadingServers, setIsLoadingServers] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
-  const [quickActions, setQuickActions] = useState<ProjectQuickAction[]>([])
+  const [quickActions, setQuickActions] = useState<ProjectQuickAction[]>(() => getCachedProjectQuickActions(projectId) ?? [])
   const [quickActionsError, setQuickActionsError] = useState<string | null>(null)
   const [newQuickActionCommand, setNewQuickActionCommand] = useState("")
   const [isAddingQuickAction, setIsAddingQuickAction] = useState(false)
   const [isZoomTooltipOpen, setIsZoomTooltipOpen] = useState(false)
   const [showOtherServers, setShowOtherServers] = useState(false)
-  const isRefreshInFlightRef = useRef(false)
   const postRunRefreshTimeoutsRef = useRef<number[]>([])
   const projectServers = localServers.filter((server) => server.sameProject)
   const otherServers = localServers.filter((server) => !server.sameProject)
@@ -90,37 +97,33 @@ function BrowserPanelImpl({ projectId, socket, onRunQuickAction }: BrowserPanelP
   const visibleServers = shouldShowOtherServers ? localServers : projectServers
 
   const refreshLocalServers = useCallback((options: { silent?: boolean } = {}) => {
-    if (isRefreshInFlightRef.current) return
-    isRefreshInFlightRef.current = true
+    const hasCachedServers = getCachedLocalHttpServers() !== null
     if (!options.silent) {
       setIsLoadingServers(true)
     }
     setServerError(null)
-    void socket.command<LocalHttpServerInfo[]>({ type: "browser.listLocalHttpServers", projectId })
-      .then((servers) => setLocalServers(servers.filter((server) => server.status >= 200 && server.status < 400)))
+    void refreshCachedLocalHttpServers(socket, projectId)
+      .then(setLocalServers)
       .catch((error) => setServerError(error instanceof Error ? error.message : String(error)))
       .finally(() => {
-        isRefreshInFlightRef.current = false
-        if (!options.silent) {
+        if (!options.silent || !hasCachedServers) {
           setIsLoadingServers(false)
         }
       })
   }, [projectId, socket])
 
   const killServer = useCallback((server: LocalHttpServerInfo) => {
+    setLocalServers(removeCachedLocalHttpServer(server.port))
     void socket.command({ type: "browser.killLocalHttpServer", port: server.port })
-      .then(() => refreshLocalServers())
+      .then(() => refreshLocalServers({ silent: true }))
       .catch((error) => setServerError(error instanceof Error ? error.message : String(error)))
   }, [refreshLocalServers, socket])
 
   const writeQuickActions = useCallback((actions: ProjectQuickAction[]) => {
     setQuickActions(actions)
     setQuickActionsError(null)
-    void socket.command<ProjectQuickAction[]>({
-      type: "project.writeQuickActions",
-      projectId,
-      quickActions: actions,
-    }).then((savedActions) => setQuickActions(savedActions))
+    void writeCachedProjectQuickActions(socket, projectId, actions)
+      .then(setQuickActions)
       .catch((error) => setQuickActionsError(error instanceof Error ? error.message : String(error)))
   }, [projectId, socket])
 
@@ -163,12 +166,24 @@ function BrowserPanelImpl({ projectId, socket, onRunQuickAction }: BrowserPanelP
 
   useEffect(() => {
     if (address) return
-    refreshLocalServers()
+    const cachedServers = getCachedLocalHttpServers()
+    if (cachedServers) {
+      setLocalServers(cachedServers)
+    } else {
+      setLocalServers([])
+    }
+    refreshLocalServers({ silent: Boolean(cachedServers) })
   }, [address, refreshLocalServers])
 
   useEffect(() => {
+    const cachedQuickActions = getCachedProjectQuickActions(projectId)
+    if (cachedQuickActions) {
+      setQuickActions(cachedQuickActions)
+    } else {
+      setQuickActions([])
+    }
     setQuickActionsError(null)
-    void socket.command<ProjectQuickAction[]>({ type: "project.readQuickActions", projectId })
+    void refreshCachedProjectQuickActions(socket, projectId)
       .then(setQuickActions)
       .catch((error) => setQuickActionsError(error instanceof Error ? error.message : String(error)))
   }, [projectId, socket])
