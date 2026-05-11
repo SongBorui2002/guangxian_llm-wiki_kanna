@@ -4,7 +4,8 @@ import type { GroupImperativeHandle } from "react-resizable-panels"
 import { useOutletContext } from "react-router-dom"
 import type { ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
-import { RightSidebar } from "../../components/chat-ui/RightSidebar"
+import { BrowserPanel } from "../../components/chat-ui/BrowserPanel"
+import { GitPanel } from "../../components/chat-ui/GitPanel"
 import { useAppDialog } from "../../components/ui/app-dialog"
 import { Card, CardContent } from "../../components/ui/card"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../../components/ui/resizable"
@@ -265,17 +266,19 @@ interface ChatWorkspaceProps {
   scrollback: number
   minColumnWidth: number
   splitTerminalShortcut?: string[]
+  pendingCommandsByTerminalId?: Record<string, string>
   onTerminalCommandSent?: () => void
+  onInitialTerminalCommandSent?: (terminalId: string) => void
   onRemoveTerminal: (projectId: string, terminalId: string) => void
   onTerminalLayout: ReturnType<typeof useTerminalLayoutStore.getState>["setTerminalSizes"]
   onLayoutChanged: (layout: Record<string, number>) => void
 }
 
-type ChatSidebarContentProps = ComponentProps<typeof RightSidebar>
+type ChatSidebarContentProps = ComponentProps<typeof GitPanel>
 
 const ChatSidebarContent = memo(function ChatSidebarContent(props: ChatSidebarContentProps) {
   return (
-    <RightSidebar
+    <GitPanel
       {...props}
       diffs={props.diffs ?? EMPTY_DIFF_SNAPSHOT}
     />
@@ -393,7 +396,9 @@ function ChatWorkspace({
   scrollback,
   minColumnWidth,
   splitTerminalShortcut,
+  pendingCommandsByTerminalId,
   onTerminalCommandSent,
+  onInitialTerminalCommandSent,
   onRemoveTerminal,
   onTerminalLayout,
   onLayoutChanged,
@@ -448,8 +453,10 @@ function ChatWorkspace({
             scrollback={scrollback}
             minColumnWidth={minColumnWidth}
             splitTerminalShortcut={splitTerminalShortcut}
+            pendingCommandsByTerminalId={pendingCommandsByTerminalId}
             focusRequestVersion={terminalFocusRequestVersion}
             onTerminalCommandSent={onTerminalCommandSent}
+            onInitialTerminalCommandSent={onInitialTerminalCommandSent}
             onRemoveTerminal={onRemoveTerminal}
             onTerminalLayout={onTerminalLayout}
           />
@@ -471,6 +478,7 @@ export function ChatPage() {
   const chatInputRef = useRef<ChatInputHandle | null>(null)
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const [pendingTerminalCommands, setPendingTerminalCommands] = useState<Record<string, string>>({})
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
   const projectId = state.activeProjectId
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -484,7 +492,8 @@ export function ChatPage() {
   const resetMainSizes = useTerminalLayoutStore((store) => store.resetMainSizes)
   const setMainSizes = useTerminalLayoutStore((store) => store.setMainSizes)
   const setTerminalSizes = useTerminalLayoutStore((store) => store.setTerminalSizes)
-  const toggleRightSidebar = useRightSidebarStore((store) => store.toggleVisibility)
+  const toggleRightPanel = useRightSidebarStore((store) => store.togglePanel)
+  const hideRightPanel = useRightSidebarStore((store) => store.hidePanel)
   const setRightSidebarSize = useRightSidebarStore((store) => store.setSize)
   const scrollback = useTerminalPreferencesStore((store) => store.scrollbackLines)
   const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
@@ -505,7 +514,9 @@ export function ChatPage() {
   const hasTerminals = terminalLayout.terminals.length > 0
   const showTerminalPane = Boolean(projectId && terminalLayout.isVisible && hasTerminals)
   const shouldRenderTerminalLayout = Boolean(projectId && hasTerminals)
-  const showRightSidebar = Boolean(projectId && rightSidebarVisibility.isVisible)
+  const activeRightPanel = projectId ? rightSidebarVisibility.rightPanel : "hidden"
+  const showRightSidebar = Boolean(projectId && activeRightPanel !== "hidden")
+  const showGitPanel = Boolean(projectId && activeRightPanel === "git")
   const shouldRenderRightSidebarLayout = Boolean(projectId)
   const isMobileRightSidebarOverlay = useMobileRightSidebarOverlayEnabled()
   const shouldRenderDesktopRightSidebarLayout = shouldRenderRightSidebarLayout && !isMobileRightSidebarOverlay
@@ -574,7 +585,7 @@ export function ChatPage() {
   } = useChatPageSidebarActions({
     state,
     projectId,
-    showRightSidebar,
+    showRightSidebar: showGitPanel,
   })
 
   const { typedEmptyStateText, isEmptyStateTypingComplete } = useEmptyStateTyping(showEmptyState, state.activeChatId)
@@ -637,14 +648,14 @@ export function ChatPage() {
 
   const handleCloseRightSidebar = useCallback(() => {
     if (!projectId) return
-    toggleRightSidebar(projectId)
-  }, [projectId, toggleRightSidebar])
+    hideRightPanel(projectId)
+  }, [hideRightPanel, projectId])
 
-  const handleToggleRightSidebar = useCallback(() => {
+  const handleToggleGitPanel = useCallback(() => {
     if (!projectId) return
 
-    if (showRightSidebar) {
-      toggleRightSidebar(projectId)
+    if (activeRightPanel === "git") {
+      hideRightPanel(projectId)
       return
     }
 
@@ -659,15 +670,37 @@ export function ChatPage() {
         if (!confirmed) return
 
         const result = await handleInitializeGit()
-        if (result?.ok && !showRightSidebar) {
-          toggleRightSidebar(projectId)
+        if (result?.ok) {
+          toggleRightPanel(projectId, "git")
         }
       })()
       return
     }
 
-    toggleRightSidebar(projectId)
-  }, [dialog, handleInitializeGit, projectId, showRightSidebar, state.chatDiffSnapshot?.status, toggleRightSidebar])
+    toggleRightPanel(projectId, "git")
+  }, [activeRightPanel, dialog, handleInitializeGit, hideRightPanel, projectId, state.chatDiffSnapshot?.status, toggleRightPanel])
+
+  const handleToggleBrowserPanel = useCallback(() => {
+    if (!projectId) return
+    toggleRightPanel(projectId, "browser")
+  }, [projectId, toggleRightPanel])
+
+  const handleRunQuickAction = useCallback((command: string) => {
+    if (!projectId) return
+    const terminalId = addTerminal(projectId)
+    setPendingTerminalCommands((current) => ({
+      ...current,
+      [terminalId]: command,
+    }))
+  }, [addTerminal, projectId])
+
+  const handleInitialTerminalCommandSent = useCallback((terminalId: string) => {
+    setPendingTerminalCommands((current) => {
+      if (!(terminalId in current)) return current
+      const { [terminalId]: _sent, ...rest } = current
+      return rest
+    })
+  }, [])
 
   const handleCancel = useCallback(() => {
     void state.handleCancel()
@@ -748,7 +781,7 @@ export function ChatPage() {
 
       if (actionMatchesEvent(resolvedKeybindings, "toggleRightSidebar", event)) {
         event.preventDefault()
-        handleToggleRightSidebar()
+        handleToggleGitPanel()
         return
       }
 
@@ -772,7 +805,7 @@ export function ChatPage() {
 
     window.addEventListener("keydown", handleGlobalKeydown)
     return () => window.removeEventListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, state.handleOpenExternal])
+  }, [addTerminal, handleToggleEmbeddedTerminal, handleToggleGitPanel, projectId, resolvedKeybindings, state.handleOpenExternal])
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -891,8 +924,9 @@ export function ChatPage() {
           localPath={state.navbarLocalPath}
           embeddedTerminalVisible={showTerminalPane}
           onToggleEmbeddedTerminal={projectId ? handleToggleEmbeddedTerminal : undefined}
-          rightSidebarVisible={showRightSidebar}
-          onToggleRightSidebar={projectId ? handleToggleRightSidebar : undefined}
+          rightPanel={activeRightPanel}
+          onToggleGitPanel={projectId ? handleToggleGitPanel : undefined}
+          onToggleBrowserPanel={projectId ? handleToggleBrowserPanel : undefined}
           onOpenExternal={handleOpenExternal}
           onExportTranscript={state.activeChatId ? () => void state.handleShareChat(state.activeChatId) : undefined}
           canExportTranscript={Boolean(state.activeChatId) && !state.isExportingStandalone}
@@ -981,7 +1015,9 @@ export function ChatPage() {
       scrollback={scrollback}
       minColumnWidth={minColumnWidth}
       splitTerminalShortcut={resolvedKeybindings.bindings.addSplitTerminal}
+      pendingCommandsByTerminalId={pendingTerminalCommands}
       onTerminalCommandSent={scheduleTerminalDiffRefresh}
+      onInitialTerminalCommandSent={handleInitialTerminalCommandSent}
       onRemoveTerminal={handleRemoveTerminal}
       onTerminalLayout={setTerminalSizes}
       onLayoutChanged={handleTerminalResize}
@@ -990,7 +1026,7 @@ export function ChatPage() {
     chatCard
   )
 
-  const rightSidebarContentProps = useMemo<ComponentProps<typeof ChatSidebarContent> | null>(() => {
+  const gitPanelContentProps = useMemo<ComponentProps<typeof ChatSidebarContent> | null>(() => {
     if (!projectId) {
       return null
     }
@@ -1055,6 +1091,11 @@ export function ChatPage() {
     state.editorLabel,
     wrapDiffLines,
   ])
+  const rightPanelContent = activeRightPanel === "browser" && projectId
+    ? <BrowserPanel projectId={projectId} socket={state.socket} onClose={handleCloseRightSidebar} onRunQuickAction={handleRunQuickAction} />
+    : gitPanelContentProps
+      ? <ChatSidebarContent {...gitPanelContentProps} />
+      : null
 
   return (
     <div ref={layoutRootRef} className="flex-1 flex flex-col min-w-0 relative">
@@ -1110,7 +1151,7 @@ export function ChatPage() {
             sizePercent={effectiveRightSidebarSize}
             sidebarPanelRef={sidebarPanelRef}
             sidebarVisualRef={sidebarVisualRef}
-            content={rightSidebarContentProps ? <ChatSidebarContent {...rightSidebarContentProps} /> : null}
+            content={rightPanelContent}
           />
         </ResizablePanelGroup>
       ) : (
@@ -1122,7 +1163,7 @@ export function ChatPage() {
           showRightSidebar={showRightSidebar}
           sidebarVisualRef={sidebarVisualRef}
           onClose={handleCloseRightSidebar}
-          content={rightSidebarContentProps ? <ChatSidebarContent {...rightSidebarContentProps} /> : null}
+          content={rightPanelContent}
         />
       ) : null}
     </div>

@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { RightSidebar, canIgnoreDiffFile, canIgnoreDiffFolder, shouldLoadDiffPatchNow } from "./RightSidebar"
+import { GitPanel, canIgnoreDiffFile, canIgnoreDiffFolder, shouldLoadDiffPatchNow } from "./GitPanel"
 import { TooltipProvider } from "../ui/tooltip"
 
-describe("RightSidebar", () => {
+describe("GitPanel", () => {
   test("loads missing patches for expanded rows", () => {
     expect(shouldLoadDiffPatchNow({
       isCollapsed: false,
@@ -65,7 +65,7 @@ describe("RightSidebar", () => {
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,
       null,
-      createElement(RightSidebar, {
+      createElement(GitPanel, {
         projectId: "project-1",
         diffs: {
           status: "ready",
@@ -118,7 +118,7 @@ describe("RightSidebar", () => {
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,
       null,
-      createElement(RightSidebar, {
+      createElement(GitPanel, {
         projectId: "project-1",
         diffs: {
           status: "ready",
@@ -173,7 +173,7 @@ describe("RightSidebar", () => {
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,
       null,
-      createElement(RightSidebar, {
+      createElement(GitPanel, {
         projectId: "project-1",
         diffs: { status: "unknown", files: [], branchHistory: { entries: [] } },
         editorLabel: "Cursor",
@@ -206,7 +206,7 @@ describe("RightSidebar", () => {
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,
       null,
-      createElement(RightSidebar, {
+      createElement(GitPanel, {
         projectId: "project-1",
         diffs: {
           status: "ready",
@@ -247,7 +247,7 @@ describe("RightSidebar", () => {
     const markup = renderToStaticMarkup(createElement(
       TooltipProvider,
       null,
-      createElement(RightSidebar, {
+      createElement(GitPanel, {
         projectId: "project-1",
         diffs: {
           status: "ready",

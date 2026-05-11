@@ -81,7 +81,7 @@ export interface DiffFileActions {
   onCopyRelativePath: (path: string) => void
 }
 
-interface RightSidebarProps extends DiffFileActions {
+interface GitPanelProps extends DiffFileActions {
   projectId: string | null
   diffs: ChatDiffSnapshot
   editorLabel: string
@@ -1418,7 +1418,7 @@ function DiffFileCard({
   )
 }
 
-function RightSidebarImpl({
+function GitPanelImpl({
   projectId,
   diffs,
   editorLabel,
@@ -1447,7 +1447,7 @@ function RightSidebarImpl({
   onDiffRenderModeChange,
   onWrapLinesChange,
   onClose,
-}: RightSidebarProps) {
+}: GitPanelProps) {
   const fileActions: DiffFileActions = useMemo(() => ({
     onOpenFile,
     onOpenInFinder,
@@ -1656,7 +1656,7 @@ function RightSidebarImpl({
   return (
     <div className="h-full min-h-0 border-l border-border bg-background md:min-w-[370px]">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 items-center gap-2 border-b border-border pl-2.5 pr-2 py-2">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border pl-2.5 pr-2 h-[49px]">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <BranchSwitcher
               currentBranchName={diffs.branchName}
@@ -2000,4 +2000,4 @@ function RightSidebarImpl({
   )
 }
 
-export const RightSidebar = memo(RightSidebarImpl)
+export const GitPanel = memo(GitPanelImpl)
