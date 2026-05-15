@@ -159,12 +159,13 @@ export function ChatNavbar({
   return (
     <CardHeader
       className={cn(
-        "absolute top-0 left-0 right-0 z-10 md:pt-[9px] lg:pb-[9px] pl-1 pr-2 border-border/0 flex items-center justify-center",
-        "bg-background border-b border-border md:border-border/0"
+        "absolute top-0 left-0 right-0 z-10 md:pt-[9px]  pl-1 pr-2 border-border/0 flex items-center justify-center",
+        "bg-gradient-to-b from-background lg:from-background/0"
       )}
     >
+      <div className="absolute top-0 left-0 right-0 z-0 h-[100px] bg-gradient-to-b from-background via-background/50 pointer-events-none block"></div>
       <div className="relative flex items-center gap-2 w-full">
-        <div className={`h-[30px] flex items-center gap-0 flex-shrink-0 border border-border/0 rounded-[9px] ${sidebarCollapsed ? 'px-1.5  border-border' : ''} px-[2px] backdrop-blur-lg`}>
+        <div className={`h-[30px] flex items-center gap-0 flex-shrink-0 border border-border/0 rounded-[9px] ${sidebarCollapsed ? 'px-1.5  border-border' : ''} px-[2px]`}>
           <Button
             variant="ghost"
             size="icon"
@@ -217,7 +218,7 @@ export function ChatNavbar({
               </div>
             ) : null}
             {(onToggleEmbeddedTerminal || onToggleGitPanel || onToggleBrowserPanel || onExportTranscript) ? (
-              <div className="flex items-center  rounded-[9px] h-[30px] backdrop-blur-lg">
+              <div className="flex items-center  rounded-[9px] h-[30px]">
                 <NavbarOverflowMenu
                   showOnDesktop={rightPanelVisible}
                   onToggleEmbeddedTerminal={onToggleEmbeddedTerminal}

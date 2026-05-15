@@ -116,6 +116,30 @@ export function canIgnoreDiffFolder(file: DiffFile) {
   return file.path.includes("/")
 }
 
+export function getPrimaryCommitActionPrefix(args: {
+  hasSummary: boolean
+  isGenerating: boolean
+  isCommitting: boolean
+  isGeneratedCommitInFlight: boolean
+  commitModeInFlight: DiffCommitMode | null
+  primaryCommitMode: DiffCommitMode
+}) {
+  if (args.hasSummary) {
+    if (args.isCommitting) {
+      if (args.isGeneratedCommitInFlight) {
+        return args.commitModeInFlight === "commit_only" ? "Committing..." : "Pushing..."
+      }
+      return args.commitModeInFlight === "commit_only" ? "Committing..." : "Committing & Pushing..."
+    }
+    return args.primaryCommitMode === "commit_only" ? "Commit to" : "Commit & push to"
+  }
+
+  if (args.isGenerating) {
+    return "Generating..."
+  }
+  return args.primaryCommitMode === "commit_only" ? "Generate & commit to" : "Generate & push to"
+}
+
 function IconButton(props: {
   label: string
   active?: boolean
@@ -1460,6 +1484,7 @@ function GitPanelImpl({
   const hasChanges = diffs.files.length > 0
   const [isGenerating, setIsGenerating] = useState(false)
   const [commitModeInFlight, setCommitModeInFlight] = useState<DiffCommitMode | null>(null)
+  const [isGeneratedCommitInFlight, setIsGeneratedCommitInFlight] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isGitHubPublishModalOpen, setIsGitHubPublishModalOpen] = useState(false)
   const [patchesByPath, setPatchesByPath] = useState<Record<string, string>>({})
@@ -1559,6 +1584,14 @@ function GitPanelImpl({
     && !isBusy
   const primaryCommitMode: DiffCommitMode = hasRemoteOrigin ? "commit_and_push" : "commit_only"
   const resolvedBranchName = diffs.branchName ?? "current branch"
+  const primaryCommitActionPrefix = getPrimaryCommitActionPrefix({
+    hasSummary,
+    isGenerating,
+    isCommitting,
+    isGeneratedCommitInFlight,
+    commitModeInFlight,
+    primaryCommitMode,
+  })
 
   async function handleCommit(mode: DiffCommitMode) {
     if (!canCommit) return
@@ -1580,19 +1613,41 @@ function GitPanelImpl({
     }
   }
 
-  async function handleGenerate() {
+  async function handleGenerateAndCommit(mode: DiffCommitMode) {
     if (!canGenerate) return
     setIsGenerating(true)
     try {
       const result = await onGenerateCommitMessage({ paths: selectedPaths })
+      const generatedSummary = result.subject.trim()
+      const generatedDescription = result.body.trim()
       if (projectId) {
         setCommitDraft(projectId, {
           summary: result.subject,
           description: result.body,
         })
       }
+      if (!generatedSummary) {
+        return
+      }
+
+      setIsGenerating(false)
+      setIsGeneratedCommitInFlight(true)
+      setCommitModeInFlight(mode)
+      const commitResult = await onCommit({
+        paths: selectedPaths,
+        summary: generatedSummary,
+        description: generatedDescription,
+        mode,
+      })
+      if (commitResult?.ok || commitResult?.localCommitCreated) {
+        if (projectId) {
+          clearCommitDraft(projectId)
+        }
+      }
     } finally {
       setIsGenerating(false)
+      setIsGeneratedCommitInFlight(false)
+      setCommitModeInFlight(null)
     }
   }
 
@@ -1605,7 +1660,7 @@ function GitPanelImpl({
       void handleCommit(primaryCommitMode)
       return
     }
-    void handleGenerate()
+    void handleGenerateAndCommit(primaryCommitMode)
   }
 
   async function handleSync(action: "fetch" | "pull" | "push" | "publish" = syncAction) {
@@ -1928,7 +1983,7 @@ function GitPanelImpl({
                                 void handleCommit(primaryCommitMode)
                                 return
                               }
-                              void handleGenerate()
+                              void handleGenerateAndCommit(primaryCommitMode)
                             }}
                           >
                             <span className="flex min-w-0 items-center gap-1.5">
@@ -1948,17 +2003,9 @@ function GitPanelImpl({
                                 <PenLine strokeWidth={2.5} className="size-3 shrink-0" />
                               )}
                               <span className="min-w-0 truncate text-left">
-                                {hasSummary
-                                  ? (isCommitting
-                                    ? (commitModeInFlight === "commit_only" ? "Committing..." : "Committing & Pushing...")
-                                    : primaryCommitMode === "commit_only"
-                                      ? <>Commit to <GitBranch strokeWidth={2.5} className="mr-[4.5px] ml-0.5 inline size-3 " />{resolvedBranchName}</>
-                                      : diffs.hasUpstream
-                                      ? <>Commit &amp; push to <GitBranch strokeWidth={2.5} className="mr-[4.5px] ml-0.5 inline size-3 " />{resolvedBranchName}</>
-                                      : <>Commit &amp; publish <GitBranch strokeWidth={2.5} className="mr-[4.5px] ml-0.5 inline size-3 " />{resolvedBranchName}</>)
-                                  : (isGenerating
-                                    ? "Generating..."
-                                    : <>Generate message for <GitBranch strokeWidth={2.5} className="mr-[4.5px] ml-0.5 inline size-3 " />{resolvedBranchName}</>)}
+                                {isGenerating || isCommitting
+                                  ? primaryCommitActionPrefix
+                                  : <>{primaryCommitActionPrefix} <GitBranch strokeWidth={2.5} className="mr-[4.5px] ml-0.5 inline size-3 " />{resolvedBranchName}</>}
                               </span>
                             </span>
                           </Button>
