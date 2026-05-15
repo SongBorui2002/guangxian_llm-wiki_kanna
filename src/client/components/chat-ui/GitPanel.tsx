@@ -1,5 +1,5 @@
 import { PatchDiff } from "@pierre/diffs/react"
-import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, Github, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
+import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, Github, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Sparkles, Trash2, Upload, UserRound, WrapText } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
   ChatAttachment,
@@ -1613,6 +1613,22 @@ function GitPanelImpl({
     }
   }
 
+  async function handleGenerate() {
+    if (!canGenerate) return
+    setIsGenerating(true)
+    try {
+      const result = await onGenerateCommitMessage({ paths: selectedPaths })
+      if (projectId) {
+        setCommitDraft(projectId, {
+          summary: result.subject,
+          description: result.body,
+        })
+      }
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   async function handleGenerateAndCommit(mode: DiffCommitMode) {
     if (!canGenerate) return
     setIsGenerating(true)
@@ -1942,20 +1958,40 @@ function GitPanelImpl({
                   <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-background to-transparent" />
                   <div className="pointer-events-auto relative">
                     <div className="space-y-0 rounded-xl  backdrop-blur-md mx-auto max-w-[700px]">
-                      <Input
-                        value={summary}
-                        onChange={(event) => {
-                          if (!projectId) return
-                          setCommitDraft(projectId, {
-                            summary: event.target.value,
-                            description,
-                          })
-                        }}
-                        onKeyDown={handleCommitKeyDown}
-                        placeholder="Commit message (override)"
-                        className="rounded-t-xl rounded-b-none px-3"
-                        disabled={isBusy || diffs.status !== "ready"}
-                      />
+                      <div className="relative">
+                        <Input
+                          value={summary}
+                          onChange={(event) => {
+                            if (!projectId) return
+                            setCommitDraft(projectId, {
+                              summary: event.target.value,
+                              description,
+                            })
+                          }}
+                          onKeyDown={handleCommitKeyDown}
+                          placeholder="Commit message"
+                          className="rounded-t-xl rounded-b-none px-3 pr-10"
+                          disabled={isBusy || diffs.status !== "ready"}
+                        />
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Generate commit message"
+                              className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                              disabled={!canGenerate}
+                              onClick={() => void handleGenerate()}
+                            >
+                              {isGenerating ? (
+                                <LoaderCircle strokeWidth={2.5} className="size-3.5 animate-spin" />
+                              ) : (
+                                <Sparkles strokeWidth={2.5} className="size-3.5" />
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Generate commit message</TooltipContent>
+                        </Tooltip>
+                      </div>
                       <Textarea
                         value={description}
                         onChange={(event) => {

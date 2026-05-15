@@ -166,6 +166,7 @@ describe("GitPanel", () => {
     expect(markup).toContain("Pull")
     expect(markup).toContain("3")
     expect(markup).toContain("Generate &amp; push to")
+    expect(markup).toContain("Generate commit message")
     expect(markup).not.toContain("Publish Branch")
   })
 
