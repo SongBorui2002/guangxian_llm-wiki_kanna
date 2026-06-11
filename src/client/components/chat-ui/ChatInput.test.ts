@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PROVIDERS } from "../../../shared/types"
@@ -122,6 +123,13 @@ describe("trimTrailingPastedNewlines", () => {
 })
 
 describe("ChatInput", () => {
+  test("does not call crypto.randomUUID directly for upload temp ids", async () => {
+    const sourcePath = path.join(import.meta.dir, "ChatInput.tsx")
+    const source = await Bun.file(sourcePath).text()
+
+    expect(source.includes("crypto.randomUUID()")).toBe(false)
+  })
+
   test("renders the mobile attachment trigger as a native file input target", () => {
     const html = renderToStaticMarkup(createElement(ChatInput, {
       onSubmit: async () => undefined,
